@@ -1,0 +1,289 @@
+---
+title: "Codes for plots and More"
+author: "Jeremie N. Mabiala"
+format: html
+bibliography: bibliography.bib 
+editor: visual
+output: html_document
+toc: true
+toc_depth: 3
+html-math-method: katex
+number-sections: true
+---
+
+### Load the packages
+
+```{r}
+library(funData)  ## for base manipulations of function data
+library(fda) #base manipulations of function data
+library(splines) ##
+library(rainbow)
+library(refund)  ## for fda and functional regression
+library(GPFDA)  ## for Gaussian process functional regression
+library(ggplot2)
+
+
+library(xtable)  # to convert datasets or R table into LateX codes.
+options(xtable.floating = FALSE)
+options(xtable.timestamp = "")
+options(width = 60)
+```
+
+### Smoothing with least squares 
+
+Un example of smoothing with least squares using the package `fda`
+
+```{r}
+##Number of curves
+n=51  
+
+## Range of values:
+argvals<-seq(0,1, len =51)
+
+## Random curves and noisy curves:
+
+x<- sin(4*pi*argvals)
+y<- x + rnorm(x)*0.2
+
+## Setting basis
+
+nbasis<-13  # Number of basis
+basisobj<-create.bspline.basis(c(0,1),nbasis)
+
+## Smoothed version of y
+ys<-smooth.basis(argvals = argvals, y=y, fdParobj = basisobj)
+
+### plot(ys) activate this line to plot it.
+## Plot the basis:
+plot(basisobj, main="13 B-spline basis")
+plot(argvals, y, main="Raw data points")
+
+```
+
+```{r}
+## Ploting the smoothed curve and the data points on the same axes.
+
+xfd<-ys$fd
+
+plotfit.fd(y, argvals = argvals, xfd)
+```
+
+We hve
+
+One can also compute the RMS, the root mean square, using the codes:
+
+```{r}
+## Compute the rootmean square:
+rmse<-sqrt(mean((eval.fd(argvals, xfd)-x)^2))
+print(rmse)
+
+for (nbasis in 4:12) {
+  basisobj = create.bspline.basis(c(0,1),nbasis)
+  ys = smooth.basis(argvals, y, basisobj)
+  xfd = ys$fd
+  gcv = ys$gcv
+  RMSE = sqrt(mean((eval.fd(argvals, xfd) - x)^2))
+  cat(paste(nbasis,round(RMSE,3),round(gcv,3),"\n"))
+}
+```
+
+### Randoms functions and Simulated functional data
+
+The code below produce the plot of the random function from the essay.
+
+```{r}
+
+# Set the seed for reproducibility
+set.seed(123)
+
+# Number of curves to plot
+num_curves <- 5
+
+# Generate random samples of Z from a standard normal distribution
+Z_values <- round(rnorm(num_curves),2)
+
+# Function to calculate X(Z, t)
+X_function <- function(Z, t) {
+  as.numeric(t >= Z)
+}
+
+# Create a data frame for plotting
+plot_data <- expand.grid(t = seq(-3, 3, length.out = 100), Z = Z_values)
+plot_data$X <- X_function(plot_data$Z, plot_data$t)
+
+# Plot using ggplot2
+ggplot(plot_data, aes(x = t, y = X, color = as.factor(Z)),size=1) +
+  geom_step(size=1) +
+  labs( x = "t", y = "X(Z, t)", color = "Z") +
+  theme_minimal() +
+  scale_color_discrete(name = "Z")+ theme_bw()
+
+#ggsave(filename = "randomF1.png", plot = last_plot())
+```
+
+Simulating (univariate) functional data by the mean of the package `funData`
+
+```{r}
+## The code below generates the figures of the section 2.4
+
+n_subjects<-30  ## Number of subjects/ or individuals curves.
+
+
+n_obs<-50  ## Number of observed points for all the curves. This number can be different for each curve, in our context.
+
+argvals_X<- seq(-10,10, len=n_obs)  ## Domain for all the curves. It can differ from curves
+
+kl_order<-15  ## The truncation order in the KL decomposition. It may also differ from individuaks curves.
+
+
+### Simulating a functional data by the mean of the paclage Fundata. We use fourier orthonormal basis, linear eigenvalues.
+
+fdata_X<-simFunData(argvals = argvals_X,M=kl_order, eFunType = "Fourier",eValType = "linear", N=n_subjects)
+
+
+### Accessing the simulated data and the true values. we also incoprorate the mean curves 
+
+fdata_X_simData<- exp(- argvals_X^2 )+ 2*sin(3*(argvals_X)^2)+fdata_X$simData  
+
+
+### Accessing to true  values 
+
+fdata_X_trues<-fdata_X$trueFuns
+
+
+## Converting the simulated data to a data
+data.frame.fd<-as.data.frame(fdata_X_simData)
+
+
+## Accessing cols. names 
+names(data.frame.fd)
+
+### Renaming:
+
+names(data.frame.fd)<-c("Ind", "Obs. pts", "Curv. Meas.") # Activate the line to rename
+
+## Displaying the simulated data:
+
+head(data.frame.fd)
+tail(data.frame.fd)
+```
+
+To obtain latex codes for the tale above, active the codes below.
+
+```{r}
+## To have the table in the sec 2.4, we make use of the package xtable that applied to head(data.frame.fd)
+
+## Activate the code to view the generated latex code.
+
+## But, for the sake of explaination, the table in sec. 2.4 was slightly modified.
+
+
+# xtable(head(data.frame.fd, 20))
+```
+
+Plot the simulated data, all the 30 curves in the same axes, as usual. Use the code below
+
+```{r}
+
+gg1<-ggplot(data = data.frame.fd, aes(x=`Obs. pts`, y=`Curv. Meas.`, color=Ind))+geom_line()+theme_bw()+ggtitle("30 curves observed at 50 time points")
+print(gg1)
+
+
+### Activate the code to save the plot
+#ggplot2::ggsave(filename = "Curves_30_1.png", plot = last_plot())
+```
+
+To plot the scatter plot for all the individual plots.
+
+```{r}
+#### Displaying the scatter plots:
+
+gg2<-ggplot(data = data.frame.fd, aes(x=`Obs. pts`, y=`Curv. Meas.`, color=Ind))+geom_point()+theme_bw()
+print(gg2)
+
+#ggsave(filename = "scatterplotGood.png", plot = last_plot())  # activae the line to save the plot
+```
+
+Displaying each individual curve separately:
+
+```{r}
+gg3<-ggplot(data = data.frame.fd, aes(x=`Obs. pts`, y=`Curv. Meas.`, color=Ind))+geom_line()+theme_bw()+facet_wrap(~Ind)
+print(gg3)
+#ggsave(file="curves1.png", plot=last_plot())  ## Activate the line to save the plot
+```
+
+Get the scatterplots for each:
+
+```{r}
+gg3<-ggplot(data = data.frame.fd, aes(x=`Obs. pts`, y=`Curv. Meas.`, color=Ind))+geom_point()+theme_bw()+facet_wrap(~Ind) #+ggtitle("Simulated Functional Data for 30 observed curves, drawn seperatedly")
+gg3
+#ggsave(file="scatterplot1.png", plot=last_plot())  ## Activate the line to save the plot.
+```
+
+Obtain the smoothed curves:
+
+```{r}
+#### The simulated curves, as for the raw data, are not smooth. We can smooth them by proceeding as follow:
+fourier.basis<-create.fourier.basis(rangeval = c(-10,10),nbasis = n_subjects)
+
+fd.simData<-funData2fd(fdata_X_simData, fourier.basis)  
+
+## Plot the smoothed version:
+plot(fd.simData, main="Smoothed curves")
+```
+
+This plots the mean curve of all the $30$ curves: $$\mu(t)= \frac {1}{30} \sum_{i=1}^{30} x_i(t)$$.
+
+```{r}
+## Displaying the meean curve
+
+mean.fdata_X<-meanFunction(fdata_X_simData)
+mean.df<-as.data.frame(mean.fdata_X)
+names(mean.df)<-c("Ind", "Obs. pts", "Curv. Meas.")
+
+gg4<-ggplot(data = mean.df, aes(x=`Obs. pts`, y=`Curv. Meas.`))+geom_point(color="red")+theme_bw()+geom_line()
+gg4
+```
+
+```{r}
+#### Fourier basis, this code plots 10 fourier basis
+f.basis<-create.fourier.basis(rangeval = c(-2,2), nbasis = 10)
+plot(f.basis)
+```
+
+### Simulating a multivariate functional data
+
+```{r}
+#### Simulating a multivariate functional with two different domains
+
+argvals_unifda1<-seq(-1,1,len=20)
+argvals_unifda2<-seq(4,6, len=30)
+ufdata1<-funData(argvals = argvals_unifda1, rbind(exp(argvals_unifda1)+3*sin(argvals_unifda1^3)))
+ufdata2<- funData(argvals_unifda2, rbind(cos(argvals_unifda2)+2*argvals_unifda2))
+
+
+### Defining the multivariate:
+
+mfdata<-multiFunData(ufdata1, ufdata2)
+plot(mfdata, obs=1)
+```
+
+```{r}
+### A more realistic object
+# element 1
+x <- seq(0,2*pi, 0.01)
+f1 <- funData(x, outer(seq(0.75, 1.25, length.out = 6), sin(2*x)+x^2))
+# element 2
+y <- seq(-1,1, 0.01); z <- seq(-0.5, 0.5, 0.01)
+X2 <- array(NA, c(6, length(y), length(z)))
+for(i in 1:6) X2[i,,] <- outer(y, z, function(x,y){sin(i*pi*y)*cos(i*pi*z)})
+f2 <- funData(list(y,z), X2)
+# MultiFunData Object
+m6 <- multiFunData(f1,f2)
+# Display multiFunData object in the console for basic information
+m6
+# Use the plot function to get an impression of the data
+## Not run: plot(m6) # m6 has 2D element, must specify one observation for plotting
+plot(m6, obs = 1, main = c("1st element (obs 1)", "2nd element (obs 1)"))
+plot(m6, obs = 6, main = c("1st element (obs 6)", "2nd element (obs 6)"))
+```
