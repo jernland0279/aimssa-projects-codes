@@ -1,0 +1,283 @@
+---
+title: "Codes for plots and More"
+author: "Jeremie N. Mabiala"
+format: html
+bibliography: bibliography.bib 
+editor: visual
+output: html_document
+toc: true
+toc_depth: 3
+html-math-method: katex
+number-sections: true
+---
+
+This codes define the covariance kernel of $f$, the gaussian kernel.
+
+```{r}
+### Covariance of $f$:
+cov.f<- function(s,t,l=0.05){
+  return(exp(-0.5*(1/l)^2* abs(s-t)^2))
+}
+```
+
+These code define the entitlements of $f$
+
+```{r}
+##  Eigen values of f
+
+eig.f<-function(r,a=1,b=3){
+  
+### Note that: c= sqrt(a^2 + 2ab)
+  return(sqrt(2*a/(a+b+sqrt(a^2+2*a*b)))*(b/(a+b+sqrt(a^2+2*a*b))^r))
+}
+
+
+##### Eigen functions of f
+eigf.f<-function(x,k=1,a=1,b=3){
+  c<- sqrt(a^2+2*a*b)
+  return(exp(-(c-a)*x^2)*(EQL:: hermite(sqrt(2*c)*x,k)))
+}
+```
+
+Defining the correlation:
+
+```{r}
+### Correlation function
+cor_fy<- function(r,q){
+  return(1/(r+q+1))
+}
+```
+
+Simulating a functional data:
+
+```{r}
+### Simulating z with the package fundata
+n= 5  
+
+## sampling points 
+argvals_y<-seq(-4,4,len=n)
+## nu,ber of basis
+nbasis_y= 10
+
+## number of individuals N
+N=10
+
+## Functional Data
+zSim<-simFunData(argvals = argvals_y,M = nbasis_y, eFunType = "Fourier" ,eValType = "linear", N = N )
+
+#### plotting the simulated z
+
+plot(zSim$simData, main="Simulated Data")
+plot(zSim$trueFuns, main="True eigenfunctions")
+
+### Smoothing these data
+
+zSimData<- funData2fd(zSim$simData)
+zSimTrue<-funData2fd(zSim$trueFuns)
+par(mfrow=c(1,2))
+plot(zSim$trueFuns, main="fundata object (raw data)")
+plot(zSimTrue, main="fd object (smoothed)")
+```
+
+Simulating the $Y$ process, with a fixed mean and 2 non functional data.
+
+```{r}
+
+## We consider data there are two non functional covariates and the basis are  1 and sin((0.5)*t^2)). We have
+
+u0<-rnorm(N)  ## first non functional data
+u1<-rnorm(N,0,0.5) ## second non functional data
+
+## Simulated Y:rm(tt)
+### Simulating the process f. 
+
+simY<- u0+ u1*sin((0.5*argvals_y)^2)+ zSim$simData
+simYTrue<-1+ sin((0.5*argvals_y)^2)+ zSim$trueVals
+y_basis<- create.fourier.basis(rangeval = c(-4,4),nbasis = nbasis_y)
+
+## We can smooth these curves and plot all of them together
+
+simY_smoothed<- funData2fd(simY,y_basis )
+
+par(mfrow=c(1,2))
+plot(simY, main="Raw data, 10 curves for Y")
+plot(simY_smoothed, main="Smoothed Y")
+```
+
+Displaying simulated values of $Y$
+
+```{r}
+### Displaying simulated values of Y 
+
+simYvalues<-as.data.frame(simY)
+colnames(simYvalues)<-c("Ind.", "Obs. time points", "Y meas.")
+obsTpts_y<-simYvalues[["Obs. time points"]]
+obsSimYvals<-simYvalues[["Y meas."]]
+
+
+par(mfrow=c(1,2))
+plot(obsTpts_y, obsSimYvals) 
+
+ggplot(data = simYvalues, aes(x=simYvalues$`Obs. time points`, y=simYvalues$`Y meas.`, colour= simYvalues$Ind.))+ geom_point()+theme_bw()
+```
+
+Displaying the true and the smoothed versions
+
+```{r}
+### Simulating X, we assume that there is only one covariate for each subjects
+## the code below generate 10 individuals X curves
+nbasis_x=15
+argvals_x=seq(-10,10, len=n)
+xSim<-simFunData(argvals = argvals_x,M = 15,eFunType = "Fourier", eValType = "linear", N=10)
+
+### Smoothing xSim 
+xbasis<-create.fourier.basis(rangeval = c(-10,10), nbasis = nbasis_x)
+xSimSmooth<-funData2fd(xSim$simData, xbasis)
+xsimTrueSmooth<-funData2fd(xSim$trueFuns, xbasis)                             ##funData2fd(xSim$trueFuns)
+## The code below plots all the 10  X curves, the true and simulated values
+par(mfrow=c(2,2))
+
+plot(xSim$simData, main="10 Simulated X values ")
+plot(xSim$trueFuns, main ="10 True values for X")
+
+plot(xSimSmooth, main="Smooothed version of  Simulated X")
+plot(xsimTrueSmooth, main="Smoothed version of True X")
+```
+
+```{r}
+### transforming xSim$SimData to dataframe
+
+xSimDataFrame<-as.data.frame(xSim$simData)
+head(xSimDataFrame)
+xSimDataObsValues<- xSimDataFrame[["X"]]
+xSimArgvals<-xSimDataFrame[["argvals1"]]
+xdata1<-xSimDataFrame$argvals1
+ggplot(data = xSimDataFrame, aes(x=argvals1, y = X, color=obs))+geom_point()+theme_bw()
+```
+
+These codes implement the coefficient $\beta$.
+
+```{r}
+# ## Defining beta: In this case, p=1. Hence beta is a scalar function
+L= 15   ## the K-L rank for f.
+
+##
+beta_q<- function(q,x){
+  res<-0
+  for(r in 1:L){
+   res<- res +cor_fy(r,q)*eig.f(x)
+  }
+  return(res)
+}
+
+### We choose the eigenvalues of Y to be linear, i.e (M+q-1)/q
+## The function below computes beta
+beta<-function(s,t){
+  res<-0
+  for(q in 1:nbasis_y){
+    res<- ((nbasis_y+ q-1)/q)*beta_q(q,s)*eval.basis(t,y_basis)[,q]
+  }
+  return(res)
+}
+
+
+### first summation over g
+#### sg and x are vector points of the same length
+## x a function data
+b0values_g<-function(i=1,h=1,sh,sg,x,tu=0.5,tv=0.5){  ## i is the individual
+  res<-0
+  for (g in 1:(length(sg)-1)){
+       xValsPerSubjectAt_g<-eval.fd(sg[g],x)[i]  ## value of X_i at s_g
+       xValsPerSubjectAt_h<-eval.fd(sg[h],x)[i]  ## value of X_i ar s_h
+      res<- beta(sg[g],tu)*beta(sg[g], tv)*cov.f(xValsPerSubjectAt_g, xValsPerSubjectAt_h)*(sg[g+1]-sg[g])*(sh[h+1]-sh[h])+res
+  }
+  return(res)
+  }
+
+###Second summation over h
+b0values<- function(i=1,sh,sg,x,tu=0.5,tv=0.5){ ## i is the subject
+  res<-0
+  for(h in 1:(length(sh)-1)){
+      res <- b0values_g(i,h,sh,sg,x,tu,tv) + res
+  }
+   return(res)
+}
+ 
+### To be changed 
+sg<-argvals_x  ## bith coming from the range values of x
+sh<-argvals_x
+x<-xSimSmooth
+  ## n is the number of observed points for Y
+
+### defining the matrix B0 for individual i
+
+tu<-argvals_y
+tv<-argvals_y
+
+
+ ### Defining the matrix B0
+## Compute the matrix B0 for a subject i
+matrixB0I<-matrix(NA, nrow = n, ncol = n)
+for(u in 1:n){
+  for(v in 1:n){
+    matrixB0I[u,v]<-b0values(i=1,sh,sg,x,tu[u],tv[v])
+  }
+}
+```
+
+```{r}
+#matrixB0I<-b0values(i=1,sh,sg,x,tu,tv)
+sigma_i=0.005
+## Computing the matrix K_i for subject i
+matrixK_i<- matrix(NA,nrow = n,ncol = n)
+diag(matrixB0I)<- diag(matrixB0I)+ sigma_i
+matrixK_i<- matrixB0I   ## Defining the matrix K_i for a subject i
+
+## Test the code: try to evaluate the matrix
+matrixK_i
+```
+
+```{r}
+# test if matrixB0I is symmetric
+print(isSymmetric(matrixB0I))
+```
+
+```{r}
+
+scalar_train<-matrix(NA,N,2)  ## 2 the number of scalar covariates
+t_train<-matrix(NA,N,n)   
+s_train<-matrix(NA,N,n)
+x_train<-matrix(NA,N,n)
+response_train<-matrix(NA,20,n)
+#response_train<-rm(tt)
+### Simulating the process f. 
+for (i in 1:10){
+  t_train[i,]<-argvals_y
+     s_train[i,]<-argvals_x
+     scalar_train<-c(u0,u1)
+     response_train[i,]<-X(simY)[i,]
+     x_train[i,]<- X(xSim$simData)[i,]
+}
+
+
+```
+
+```{r}
+### Eigenelements of the covariance kernel of f, they are well known.
+
+
+### First  we use the package EQL, that provides an implementation of the Hermite polynomial
+
+# We define the eigenvalues:
+
+eig.f<-function(r,a=1,b=3){
+  
+  ###Note that: c= sqrt(a^2 + 2ab)
+  return(sqrt(2*a/(a+b+sqrt(a^2+2*a*b)))*(b/(a+b+sqrt(a^2+2*a*b))^r))
+}
+
+### Plot of the eigenvalues of f against the rank k, for given values of a=1, b=3
+rs <-seq(1,20)
+#gplt<-ggplot(eig.f(rs), aes(x=rs, y=eig.f(rs), color="red"))+ geom_line()
+plot(eig.f(rs),rs, type="l", lwd=2, lty=2, col="red")
+```
